@@ -8,19 +8,6 @@ import re
 from datetime import datetime
 from plugins import register, Plugin, Event, logger, Reply, ReplyType
 
-'''
-plugins:
-
-  - name: douyin
-    command: [复制打开抖音, v.douyin, douyin.com]
-    limit_size: 50  # 限制视频大小，单位MB
-    without_at:     # 无需@机器人也会解析，bool或dict
-      wx_userid: true,     # 私聊
-      xxxx@chatroom: true, # 群聊
-      *: false
-    keep_assets_days: 1
-
-'''
 
 @register
 class App(Plugin):
@@ -36,7 +23,7 @@ class App(Plugin):
 
     @property
     def commands(self):
-        cmds = self.config.get('command', 'douyin.com')
+        cmds = self.config.get('command', ['douyin.com', '复制打开抖音', 'v.douyin'])
         if not isinstance(cmds, list):
             cmds = [cmds]
         return cmds
@@ -50,11 +37,12 @@ class App(Plugin):
         return val
 
     def did_receive_message(self, event: Event):
-        # 初始化动态配置
+
+        # 初始化动态配置        
         self.limit_size = self.config_for(event, 'limit_size', 50)
         api_base_url = self.config_for(event, 'api_base_url', '')
         self.api_base_url = f"{api_base_url.rstrip('/')}/api/hybrid/video_data"
-
+        logger.info(f"without_at config: {self.config_for(event, 'without_at')}")
         if self.config_for(event, 'without_at'):
             self.reply(event)
 
@@ -72,16 +60,29 @@ class App(Plugin):
 
     def reply(self, event: Event):
         query = event.message.content
+        logger.info(f"Processing query: {query}")
+        logger.info(f"Commands to match: {self.commands}")
         for cmd in self.commands:
             if cmd in query:
+                logger.info(f"Matched command: {cmd}")
                 event.reply = self.generate_reply(event)
                 event.bypass()
                 return
+        logger.info("No command matched")   
 
     def generate_reply(self, event: Event) -> Reply:
         query = event.message.content
         text = query
-        result = asyncio.run(self.hybrid_parsing(query)) or {}
+        try:
+            result = asyncio.run(self.hybrid_parsing(query)) or {}
+
+        except Exception as exc:
+            logger.error(f"Error in hybrid_parsing: {exc}")
+            return Reply(ReplyType.TEXT, "视频解析失败，请稍后再试。")
+
+        if not result:
+            return Reply(ReplyType.TEXT, "未找到视频数据，请检查链接是否有效。")
+        
         vdata = result
         if vdata:
             # 提取无水印视频链接和视频大小
@@ -115,6 +116,9 @@ class App(Plugin):
             # 下载链接处理
             url_pattern = r'https?://(?:www\.)?douyin\.com/[^\s]+|https?://v\.douyin\.com/[^\s]+'
             short_match = re.search(url_pattern, text)
+            if not short_match:
+                logger.error("No Douyin URL found in message")
+                return Reply(ReplyType.TEXT, "未找到有效的抖音链接，请检查输入")
             douyin_short_url = short_match.group(0)
             download_link = f"{self.config_for(event, 'api_base_url').rstrip('/')}/api/download?url={douyin_short_url}&prefix=true&with_watermark=false"
             logger.debug(f"[douyin] 下载视频，video_url={download_link}")
