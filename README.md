@@ -15,6 +15,7 @@
 plugins:
 
   - name: douyin
+    api_base_url: "http://192.168.1.101:2333"
     command: 
       - 复制打开抖音
       - v.douyin

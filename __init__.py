@@ -1,3 +1,3 @@
-from .plugin import App
+from .douyin import Douyin
 
-__all__ = ["App"]
+__all__ = ["Douyin"]

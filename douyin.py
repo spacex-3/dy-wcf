@@ -10,7 +10,7 @@ from plugins import register, Plugin, Event, logger, Reply, ReplyType
 
 
 @register
-class App(Plugin):
+class Douyin(Plugin):
     name = 'douyin'
     latest_clear = 0
 
@@ -176,7 +176,7 @@ class App(Plugin):
         except Exception as exc:
             logger.warning('Clear assets failed: %s', exc)
 
-    def get_douyin_video_data(self, url, event: Event, retries=3, wait_time=5):
+    def get_douyin_video_data(self, url, retries=3, wait_time=5):
         """
         调用抖音API，获取无水印视频数据，包含重试机制
         retries: 最大重试次数
