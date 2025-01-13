@@ -26,7 +26,7 @@ from plugins import register, Plugin, Event, logger, Reply, ReplyType
 
 @register
 class App(Plugin):
-    name = 'douyin_scraper'
+    name = 'douyin'
     latest_clear = 0
 
     def __init__(self, config: dict):
