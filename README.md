@@ -1,5 +1,17 @@
-配置：
+### 安装
 
+添加以下配置到插件源配置文件`plugins/source.json`:
+```yaml
+  "douyin": {
+    "repo": "https://github.com/spacex-3/dy-wcf.git",
+    "desc": "抖音视频去水印"
+  }
+```
+
+### 配置
+
+添加以下配置到配置文件`config.json`:
+```yaml
 plugins:
 
   - name: douyin
@@ -10,3 +22,4 @@ plugins:
       xxxx@chatroom: true, # 群聊
       *: false
     keep_assets_days: 1
+```
