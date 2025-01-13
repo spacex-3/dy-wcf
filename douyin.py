@@ -1,8 +1,6 @@
 import os
 import time
-import asyncio
 import requests
-import time
 import re
 
 from datetime import datetime
@@ -42,7 +40,7 @@ class Douyin(Plugin):
         self.limit_size = self.config_for(event, 'limit_size', 50)
         api_base_url = self.config_for(event, 'api_base_url', '')
         self.api_base_url = f"{api_base_url.rstrip('/')}/api/hybrid/video_data"
-        logger.info(f"without_at config: {self.config_for(event, 'without_at')}")
+
         if self.config_for(event, 'without_at'):
             self.reply(event)
 
@@ -60,12 +58,11 @@ class Douyin(Plugin):
 
     def reply(self, event: Event):
         query = event.message.content
-        logger.info(f"Processing query: {query}")
-        logger.info(f"Commands to match: {self.commands}")
         for cmd in self.commands:
             if cmd in query:
                 logger.info(f"Matched command: {cmd}")
                 event.reply = self.generate_reply(event)
+                logger.info(f"视频信息已发送，停止处理")
                 event.bypass()
                 return
         logger.info("No command matched")   
@@ -73,15 +70,21 @@ class Douyin(Plugin):
     def generate_reply(self, event: Event) -> Reply:
         query = event.message.content
         text = query
+        text_reply = None
+        video_reply = None
+        
         try:
-            result = asyncio.run(self.hybrid_parsing(query)) or {}
+            result = self.hybrid_parsing(query) or {}
 
         except Exception as exc:
             logger.error(f"Error in hybrid_parsing: {exc}")
-            return Reply(ReplyType.TEXT, "视频解析失败，请稍后再试。")
+            text_reply = Reply(ReplyType.TEXT, "视频解析失败，请稍后再试。")
+            event.channel.send(text_reply, event.message)
 
         if not result:
-            return Reply(ReplyType.TEXT, "未找到视频数据，请检查链接是否有效。")
+            text_reply = Reply(ReplyType.TEXT, "未找到视频数据，请检查链接是否有效。")
+            event.channel.send(text_reply, event.message)
+            return
         
         vdata = result
         if vdata:
@@ -111,14 +114,16 @@ class Douyin(Plugin):
             collect_count = statistics.get('collect_count', 0)
             share_count = statistics.get('share_count', 0)
             
-            size_tip = f'\n视频尺寸({video_size_mb}MB)过大，无法发送视频' if video_size_mb >= self.limit_size else ''
+            size_tip = f'视频大小({video_size_mb}MB)超过管理员限制({self.limit_size}MB)，无法发送视频。' if video_size_mb >= self.limit_size else ''
 
             # 下载链接处理
             url_pattern = r'https?://(?:www\.)?douyin\.com/[^\s]+|https?://v\.douyin\.com/[^\s]+'
             short_match = re.search(url_pattern, text)
             if not short_match:
                 logger.error("No Douyin URL found in message")
-                return Reply(ReplyType.TEXT, "未找到有效的抖音链接，请检查输入")
+                text_reply = Reply(ReplyType.TEXT, "未找到有效的抖音链接，请检查输入")
+                event.channel.send(text_reply, event.message)
+                return
             douyin_short_url = short_match.group(0)
             download_link = f"{self.config_for(event, 'api_base_url').rstrip('/')}/api/download?url={douyin_short_url}&prefix=true&with_watermark=false"
             logger.debug(f"[douyin] 下载视频，video_url={download_link}")
@@ -137,21 +142,21 @@ class Douyin(Plugin):
 
                 # 发送视频信息和观看链接
                 if size_tip:
-                    reply = Reply(ReplyType.TEXT, f'{size_tip}')
+                    size_reply = Reply(ReplyType.TEXT, f'{size_tip}')
+                    event.channel.send(size_reply, event.message)
                 else:
-                    reply = Reply(ReplyType.VIDEO, download_link)
-                return Reply(ReplyType.TEXT, f"抖音视频信息：\n用户: {nickname}, 发布时间: {create_time}, 视频大小: {video_size_mb}MB\n点赞: {digg_count}, 评论: {comment_count}, 收藏: {collect_count}, 分享: {share_count}\n描述: {desc}\n无压缩无水印视频链接：{short_video_link}")
+                    video_reply = Reply(ReplyType.VIDEO, download_link)
+                    event.channel.send(video_reply, event.message)
+                    logger.info("视频已发送")
+                    
+                return Reply(ReplyType.TEXT, f"抖音视频信息：\n用户: {nickname}, 发布时间: {create_time}, 视频大小: {video_size_mb}MB\n点赞: {digg_count}, 评论: {comment_count}, 收藏: {collect_count}, 分享: {share_count}\n描述: {desc}\n无压缩无水印视频链接（有时效）：{short_video_link}")
 
-    async def hybrid_parsing(self, url):
-        result = {}
-        for n in range(1):
-            try:
-                return await self.get_douyin_video_data(url) or {}
-            except Exception as exc:
-                logger.error('Scraper Exception: %s', exc)
-                result = {'message': f'{exc}'}
-                await asyncio.sleep(0.1)
-        return result
+    def hybrid_parsing(self, url):
+        try:
+            return self.get_douyin_video_data(url) or {}
+        except Exception as exc:
+            logger.error('Scraper Exception: %s', exc)
+            return {}
 
     def clear_assets(self):
         now = time.time()
@@ -177,30 +182,19 @@ class Douyin(Plugin):
             logger.warning('Clear assets failed: %s', exc)
 
     def get_douyin_video_data(self, url, retries=3, wait_time=5):
-        """
-        调用抖音API，获取无水印视频数据，包含重试机制
-        retries: 最大重试次数
-        wait_time: 每次重试的等待时间（秒）
-        """
-
- 
         for attempt in range(retries):
             try:
                 response = requests.get(self.api_base_url, params={"url": url})
                 if response.status_code == 200:
                     return response.json().get('data', {})
                 else:
-                    logger.debug(f"API 请求失败，状态码：{response.status_code}")
+                    logger.debug(f"API 请求失败，状态码：{response.status}")
             except Exception as e:
                 logger.debug(f"API 请求出错: {e}")
-            
-            # 如果请求失败，等待指定的时间后重试
-            logger.debug(f"请求失败，等待 {wait_time} 秒后重试...（第 {attempt + 1} 次重试）")
             time.sleep(wait_time)
-        
-        # 所有重试都失败，返回 None
         logger.debug("所有重试都失败，无法获取抖音视频数据")
         return None
+
 
 
     def shorten_link(self, long_url):
