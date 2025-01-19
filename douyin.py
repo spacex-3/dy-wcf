@@ -201,7 +201,7 @@ class Douyin(Plugin):
         """
         调用短链接API将长链接转为短链接
         """
-        shorten_api_url = "https://d.zpika.com/api"  # 你的短链接API URL
+        shorten_api_url = "https://d.za.com/api"  # 你的短链接API URL
         payload = {"url": long_url}
 
         try:
