@@ -136,7 +136,7 @@ class Douyin(Plugin):
                 short_video_link = self.shorten_link(video_link)
                 if short_video_link:
                     # 拼接完整的短链接
-                    short_video_link = f"https://d.zpika.com{short_video_link}"
+                    short_video_link = f"https://d.za.com{short_video_link}"
                 else:
                     short_video_link = video_link  # 如果短链接失败，仍然使用长链接
 
